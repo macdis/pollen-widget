@@ -22,12 +22,12 @@ can be stored in a 'Pollen Widget.json' file saved in the same directory as the 
 If both are defined, then the value in 'Pollen Widget.json' is preferred.
 Example of 'Pollen Widget.json':
 {
-  "apiKey": "yourGoogleApiKey"
+    "apiKey": "yourGoogleApiKey"
 }
 */
 let apiKey = "yourGoogleApiKey"; // Google API key
-const startMonth = 4; // 1=January ... 12=December
-const endMonth = 9;
+const startMonth = 1; // 1=January ... 12=December
+const endMonth = 12;
 const offSeasonMessage = "Check back next"; // Of the form: `Check back next ${startMonth}!`
 const days = 5;
 const updateInterval = 4; // Hours
@@ -52,7 +52,7 @@ const widgetColors = {
     bg1: "#1c1c1c", // Ditto
     defaultText: "#f5f5f5", // CSS whitesmoke
     lighterGrey: "#dcdcdc", // CSS Gainsboro
-    0: "#003300", // This is used to give a colour value to zero UPI values. (Null values are transparent.)
+    0: "#001e00", // This is used to give a colour value to zero UPI values. (Null values are transparent.)
     1: "#2d8953", // official = #009E3A The commented-out colours are the official Universal Pollen Index colours
     2: "#2ecc71", // official = #84CF59 (by "official" I mean the colours the Google Pollen API uses)
     3: "#f1c40f", // official = #FFFF00
@@ -63,7 +63,7 @@ const widgetColors = {
 
 // Corrections (in case you want a place name to be spelled in a certain way and the Google API doesn't spell it that way)
 // { termToBeCorrected: "correctedVersion"}
-let corrections = {
+const corrections = {
     Montreal: "Montréal",
 };
 
@@ -80,7 +80,7 @@ bgColorGradient.colors = [
 ];
 bgColorGradient.locations = [0, 0.75];
 const now = new Date();
-const nowLocal = +(+now).toString().slice(0, -3); // Epoch in seconds (strip milliseconds)
+const nowEpoch = Math.floor(Date.now() / 1000); // Epoch in seconds
 
 // Initialize local file manager and cache
 const fm = FileManager.local();
@@ -90,21 +90,20 @@ if (!fm.fileExists(path)) fm.createDirectory(path, false);
 // Remove all cached data outside of timeFrame + 86400 seconds (24 hours)
 if (fm.isDirectory(path) && fm.listContents(path).length > 0) {
     fm.listContents(path).forEach((file) => {
-        const thisFileTimeStamp = +(+fm.modificationDate(fm.joinPath(path, file)))
-            .toString()
-            .slice(0, -3); //Epoch in seconds (strip milliseconds)
-        if (nowLocal - thisFileTimeStamp > timeFrame + 86400) {
-            fm.remove(fm.joinPath(path, file));
+        const filePath = fm.joinPath(path, file);
+        const fileModEpoch = Math.floor(fm.modificationDate(filePath).getTime() / 1000);
+        if (nowEpoch - fileModEpoch > timeFrame + 86400) {
+            fm.remove(filePath);
         }
     });
 }
 
-//Initialize iCloud file manager
+// Initialize iCloud file manager
 const fmCloud = FileManager.iCloud();
 if (fmCloud.isDirectory(fmCloud.documentsDirectory())) {
     const jsonVar = fmCloud.joinPath(
         fmCloud.documentsDirectory(),
-        "Pollen Widget.json"
+        "Pollen Widget.json",
     );
     if (fmCloud.fileExists(jsonVar)) {
         const imported = await JSON.parse(fmCloud.readString(jsonVar));
@@ -141,7 +140,7 @@ if (!months.includes(month)) {
     stack.layoutHorizontally();
     stack.addSpacer();
     const message = stack.addText(
-        `${offSeasonMessage} ${new Date(new Date().setMonth(startMonth - 1)).toLocaleString(myLocale, { month: "long" })}!`
+        `${offSeasonMessage} ${new Date(new Date().setMonth(startMonth - 1)).toLocaleString(myLocale, { month: "long" })}!`,
     );
     message.centerAlignText();
     message.font = offSeasonFont;
@@ -210,7 +209,7 @@ if (
 // Add the active file name to the path
 const activeFile = fm.joinPath(
     path,
-    `/pollen-${searchTerm.replace(/\s/g, "-")}.json`
+    `/pollen-${searchTerm.replace(/\s/g, "-")}.json`,
 );
 
 // Fetch data only if there is no cached data
@@ -220,75 +219,73 @@ if (!fm.fileExists(activeFile)) {
 }
 const cachedData = await JSON.parse(fm.readString(activeFile));
 
-// Initialize date formatter
+// Helper: convert a Google Pollen API date object { year, month, day } to a yyyyMMdd number
+function apiDateToNum(d) {
+    return +(`${d.year}${d.month.toString().padStart(2, "0")}${d.day.toString().padStart(2, "0")}`);
+}
+
+// Initialize date formatter (device-local time)
 const df = new DateFormatter();
 df.dateFormat = "yyyyMMdd";
-// Get the dates we need as numbers
-const nowLocalDate = +df.string(now); //yyyyMMdd
-const nowUTCDate =
-    +`${now.getUTCFullYear().toString()}${(now.getUTCMonth() + 1).toString().padStart(2, "0")}${now.getUTCDate().toString().padStart(2, "0")}`; //yyyyMMdd
-const fileTimeStamp = +(+fm.modificationDate(activeFile))
-    .toString()
-    .slice(0, -3); //Epoch in seconds (strip milliseconds)
-const inFileDate =
-    +`${cachedData.dailyInfo[0].date.year}${cachedData.dailyInfo[0].date.month.toString().padStart(2, "0")}${cachedData.dailyInfo[0].date.day.toString().padStart(2, "0")}`; //yyyyMMdd
-const dateDiff = nowLocalDate - nowUTCDate;
 
-// Some debugging info, if needed
-// console.log(`nowLocalDate = ${nowLocalDate}`);
-// console.log(`nowUTCDate = ${nowUTCDate}`);
-// console.log(`nowLocal = ${nowLocal}`);
-// console.log(`inFileDate = ${inFileDate}`);
-// console.log(`fileTimeStamp = ${fileTimeStamp}`);
-// console.log(`Date difference = ${dateDiff}`);
-console.log(`Data age = ${nowLocal - fileTimeStamp}/${timeFrame} seconds`);
+// Today's local date as a yyyyMMdd number
+const todayLocal = +df.string(now);
 
-// Is the local date the same as the UTC date?
-// dateDiff = nowLocalDate - nowUTCDate;
-//          = 20240614 - 20240614 = 0 means today and the data's today match, so just update normally
-//          = 20240613 - 20240614 = -1 means you're in an UTC- timezone when it's midnight (or later) UTC, so keep the cached data until the dates match again
-//          = 20240615 - 20240614 = +1 means you're in a UTC+ timezone when midnight arrives, so shift the data while waiting for the dates to match again
-//          = something other than 0, -1, or 1 means Something's off, so reset
+// Cache age in seconds
+const fileTimeStamp = Math.floor(fm.modificationDate(activeFile).getTime() / 1000);
+const cacheAge = nowEpoch - fileTimeStamp;
 
-switch (dateDiff) {
-    case 0:
-        if (nowLocal - fileTimeStamp > timeFrame) {
-            console.log("Cached data expired, fetching new data. [0]");
-            var data = await getJsonData();
-        } else {
-            console.log("Using cached data. [0]");
-            var data = cachedData;
-        }
-        break;
-    case -1:
-        if (nowLocal - fileTimeStamp > timeFrame) {
-            console.log(
-                "Cached data expired, but you're in UTC-x and the UTC date has changed. Re-using cached data for now. [-1]"
-            );
-            var data = cachedData;
-        } else {
-            console.log("Using cached data. [-1]");
-            var data = cachedData;
-        }
-        break;
-    case 1:
-        if (nowLocal - fileTimeStamp > timeFrame) {
-            console.log(
-                "Cached data expired and you're in UTC+x and the UTC date is behind your date. Retrieving and shifting the data. [+1]"
-            );
-            var data = await getJsonData();
-            data.dailyInfo.shift();
-        } else {
-            console.log("Using shifted cached data. [+1]");
-            var data = cachedData;
-            data.dailyInfo.shift();
-        }
-        break;
-    default:
-        console.log(
-            "Your timezone may have changed drastically or something else is way off. Renewing the cached data."
-        );
-        var data = await getJsonData();
+console.log(`todayLocal = ${todayLocal}`);
+console.log(`Cache age  = ${cacheAge}/${timeFrame} seconds`);
+
+// The Google Pollen API returns dates in UTC. When the device's local date
+// differs from UTC (e.g., UTC+ after local midnight, or UTC- after UTC midnight),
+// the first date in the API response may not match today's local date.
+// Instead of assuming a fixed offset, we find today's local date in the array.
+
+// Find today's local date in the cached data
+let todayIndex = cachedData.dailyInfo.findIndex(
+    (d) => apiDateToNum(d.date) === todayLocal
+);
+
+if (todayIndex >= 0 && cacheAge <= timeFrame) {
+    // Today is in the cache and it's still fresh — use it
+    console.log(`Using cached data. Today found at index ${todayIndex}.`);
+    var data = JSON.parse(JSON.stringify(cachedData));
+    if (todayIndex > 0) data.dailyInfo = data.dailyInfo.slice(todayIndex);
+} else if (todayIndex >= 0 && cacheAge > timeFrame) {
+    // Today is in the cache but the cache is stale — refetch
+    console.log("Cache expired but today is in cache. Refetching.");
+    // Save today's entry before we overwrite the cache
+    const savedToday = JSON.parse(JSON.stringify(cachedData.dailyInfo[todayIndex]));
+    var data = await getJsonData();
+    let freshTodayIndex = data.dailyInfo.findIndex(
+        (d) => apiDateToNum(d.date) === todayLocal
+    );
+    if (freshTodayIndex >= 0) {
+        // Fresh data includes today — use it
+        if (freshTodayIndex > 0) data.dailyInfo = data.dailyInfo.slice(freshTodayIndex);
+    } else {
+        // Fresh data is UTC-ahead, today is missing. Prepend saved today.
+        console.log("Fresh data is UTC-ahead. Prepending today from previous cache.");
+        data.dailyInfo.unshift(savedToday);
+    }
+} else {
+    // Today is NOT in the cached data at all
+    console.log("Today not in cached data. Refetching.");
+    var data = await getJsonData();
+    let freshTodayIndex = data.dailyInfo.findIndex(
+        (d) => apiDateToNum(d.date) === todayLocal
+    );
+    if (freshTodayIndex >= 0) {
+        if (freshTodayIndex > 0) data.dailyInfo = data.dailyInfo.slice(freshTodayIndex);
+    } else {
+        // Today isn't available anywhere. This happens if:
+        // - First run of the day was already after UTC rolled over (UTC- timezone), OR
+        // - Cache was from days ago and already cleared
+        // Use the data as-is (starts from tomorrow UTC = today is missing).
+        console.log("Today not available anywhere. Using data starting from UTC's today.");
+    }
 }
 
 // Set some variables
@@ -299,7 +296,7 @@ const dayZero = new Date(
     0,
     0,
     0,
-    0
+    0,
 );
 const countryCode = data.regionCode;
 if (data.placeName == null) {
@@ -322,7 +319,7 @@ data.dailyInfo.forEach((forecastDay) => {
         0,
         0,
         0,
-        0
+        0,
     ).toLocaleDateString(myLocale, {
         weekday: "narrow",
     });
@@ -364,7 +361,9 @@ stackPlace.addSpacer();
 stackPlace.centerAlignContent();
 stackPlace.backgroundColor = Color.clear();
 if (place.length > 9) {
-    var placeText = stackPlace.addText(place.substring(0, 9) + "\u2026" + "\u00a0");
+    var placeText = stackPlace.addText(
+        place.substring(0, 9) + "\u2026" + "\u00a0",
+    );
 } else {
     var placeText = stackPlace.addText(place + "\u00a0");
 }
@@ -376,7 +375,7 @@ placeText.shadowOffset = new Point(1, 1);
 placeText.shadowRadius = 1;
 if (searchTerm === "here" || searchTerm === "saved") {
     let stackPlaceImage = stackPlace.addImage(sf.image);
-    stackPlaceImage.imageSize = new Size(colWidths[0] - 2, colWidths[0] - 2);
+    stackPlaceImage.imageSize = new Size(colWidths[0] - 5, colWidths[0] - 5);
     stackPlaceImage.tintColor = new Color(widgetColors.defaultText);
     stackPlaceImage.centerAlignImage();
 }
@@ -541,7 +540,7 @@ data.dailyInfo[0].pollenTypeInfo.forEach((pollenType, i) => {
 // If you uncomment one of the above options, then comment out the next two const declarations
 const numerator = Object.values(dataLS).reduce(
     (accumulator, currentValue) => accumulator + currentValue,
-    0
+    0,
 );
 const denominator = 5 * Object.keys(dataLS).length;
 // Avoid dividing by zero
@@ -605,7 +604,7 @@ async function getJsonData() {
         placeNameLong = await getLocalityReverse(lat, lon, myLocale);
     } else {
         const request = new Request(
-            `https://maps.googleapis.com/maps/api/geocode/json?address="${searchTerm}"&language=${languageCode}&key=${apiKey}`
+            `https://maps.googleapis.com/maps/api/geocode/json?address="${searchTerm}"&language=${languageCode}&key=${apiKey}`,
         );
         const geoJson = await request.loadJSON();
         if (geoJson.status !== "OK") throw "Incorrect place name or keyword?";
@@ -615,7 +614,7 @@ async function getJsonData() {
         lon = geoData.geometry.location.lng;
     }
     const request = new Request(
-        `https://pollen.googleapis.com/v1/forecast:lookup?location.latitude=${lat}&location.longitude=${lon}&days=${days}&key=${apiKey}&languageCode=${languageCode}&plantsDescription=0`
+        `https://pollen.googleapis.com/v1/forecast:lookup?location.latitude=${lat}&location.longitude=${lon}&days=${days}&key=${apiKey}&languageCode=${languageCode}&plantsDescription=0`,
     );
     const allData = await request.loadJSON();
     if (allData.hasOwnProperty("dailyInfo")) {
@@ -654,7 +653,7 @@ async function progressCircle(
     colour = "hsl(0, 0%, 100%)",
     background = "hsl(0, 0%, 10%)",
     size = 56,
-    barWidth = 5.5
+    barWidth = 5.5,
 ) {
     if (value > 1) {
         value /= 100;
@@ -718,7 +717,7 @@ async function progressCircle(
     c.arc( posX, posY, (size-lineWidth-1)/2, (Math.PI/180) * 270, (Math.PI/180) * (270 + result) )
     c.stroke()
     completion(canvas.toDataURL().replace("data:image/png;base64,",""))`,
-        true
+        true,
     );
     const image = Image.fromData(Data.fromBase64String(base64));
 
