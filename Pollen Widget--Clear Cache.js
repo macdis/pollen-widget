@@ -12,17 +12,17 @@ const fm = FileManager.local();
 const dir = "macdis-pollen-widget-data";
 const path = fm.joinPath(fm.documentsDirectory(), dir);
 if (fm.isDirectory(path)) {
-  const a = new Alert();
-  a.title = "Warning!";
-  a.message = "Erase all stored pollen data?";
-  a.addAction("OK");
-  a.addCancelAction("Cancel");
-  const decision = await a.presentAlert();
-  if (decision === -1) {
-    return;
-  } else {
-    fm.remove(path);
-  }
+    const a = new Alert();
+    a.title = "Warning!";
+    a.message = "Erase all stored pollen data?";
+    a.addAction("OK");
+    a.addCancelAction("Cancel");
+    const decision = await a.presentAlert();
+    if (decision === -1) {
+        return;
+    } else {
+        fm.remove(path);
+    }
 } else {
-  console.error("Path does not exist!");
+    console.error("Path does not exist!");
 }
