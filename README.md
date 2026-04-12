@@ -24,7 +24,7 @@ The colour codes refer to the [Universal Pollen Index](https://developers.google
 
 |            Colour             | UPI Code | Pollen Level |
 | :---------------------------: | :------: | :----------: |
-| $${\color{#002600}&#x25FC;}$$ |    0     |  No pollen   |
+| $${\color{#001e00}&#x25FC;}$$ |    0     |  No pollen   |
 | $${\color{#2d8953}&#x25FC;}$$ |    1     |   Very low   |
 | $${\color{#2ecc71}&#x25FC;}$$ |    2     |     Low      |
 | $${\color{#f1c40f}&#x25FC;}$$ |    3     |   Moderate   |
