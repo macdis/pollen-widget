@@ -207,10 +207,75 @@ if (
 }
 
 // Add the active file name to the path
-const activeFile = fm.joinPath(
-    path,
-    `/pollen-${searchTerm.replace(/\s/g, "-")}.json`,
-);
+// For "here" mode, resolve location early so we can make the cache location-aware.
+// For other modes, activeFile is determined by the search term as before.
+let activeFile;
+if (searchTerm === "here") {
+    let hereLat, hereLon;
+    try {
+        const hereLocation = await getLocation();
+        hereLat = hereLocation.latitude;
+        hereLon = hereLocation.longitude;
+    } catch (e) {
+        // Geolocation failed — fall back to any existing "here" cache
+        const fallbackFile = fm.listContents(path).find((f) => f.startsWith("pollen-here-"));
+        if (fallbackFile) {
+            console.log("Geolocation failed. Using existing 'here' cache.");
+            hereLat = null;
+            hereLon = null;
+            activeFile = fm.joinPath(path, fallbackFile);
+        } else {
+            throw "Geolocation failed and no cached location data exists!";
+        }
+    }
+    if (hereLat !== null && hereLat !== undefined) {
+        // Round to ~10 km precision
+        const latRound = hereLat.toFixed(1);
+        const lonRound = hereLon.toFixed(1);
+        const idealFile = fm.joinPath(path, `/pollen-here-${latRound}-${lonRound}.json`);
+
+        if (fm.fileExists(idealFile)) {
+            // Exact grid cell match — use it
+            activeFile = idealFile;
+        } else {
+            // No match for current location. Check if there's a recent "here" cache
+            // from a nearby-ish location that's still within the update interval.
+            const existingHereFiles = fm.listContents(path).filter((f) => f.startsWith("pollen-here-"));
+            let recentFile = null;
+
+            for (const f of existingHereFiles) {
+                const fPath = fm.joinPath(path, f);
+                const fAge = nowEpoch - Math.floor(fm.modificationDate(fPath).getTime() / 1000);
+                if (fAge <= timeFrame) {
+                    recentFile = fPath;
+                    break;
+                }
+            }
+
+            if (recentFile) {
+                // A recent cache exists from a different grid cell — reuse it
+                // (e.g., on a train, don't burn API calls every 10 km)
+                console.log("Location changed but cache from previous location is still fresh. Reusing.");
+                activeFile = recentFile;
+            } else {
+                // No recent cache — fetch fresh and clean up old files
+                activeFile = idealFile;
+                existingHereFiles.forEach((f) => {
+                    fm.remove(fm.joinPath(path, f));
+                });
+            }
+        }
+
+        // Store resolved coordinates so getJsonData() doesn't have to re-fetch them
+        var resolvedLat = hereLat;
+        var resolvedLon = hereLon;
+    }
+} else {
+    activeFile = fm.joinPath(
+        path,
+        `/pollen-${searchTerm.replace(/\s/g, "-")}.json`,
+    );
+}
 
 // Fetch data only if there is no cached data
 if (!fm.fileExists(activeFile)) {
@@ -583,19 +648,15 @@ function getFlagEmoji(countryCode) {
 async function getJsonData() {
     let lat, lon, placeNameLong;
     if (searchTerm === "here") {
-        try {
-            const hereLocation = await getLocation();
-            lat = hereLocation.latitude;
-            lon = hereLocation.longitude;
-        } catch (e) {
-            // On error use last location
-            if (fm.fileExists(activeFile)) {
-                let tmp = await JSON.parse(fm.readString(activeFile));
-                lat = tmp.location.latitude;
-                lon = tmp.location.longitude;
-            } else {
-                throw "Geolocation failed!";
-            }
+        if (typeof resolvedLat !== "undefined" && resolvedLat !== null) {
+            lat = resolvedLat;
+            lon = resolvedLon;
+        } else if (fm.fileExists(activeFile)) {
+            let tmp = await JSON.parse(fm.readString(activeFile));
+            lat = tmp.location.latitude;
+            lon = tmp.location.longitude;
+        } else {
+            throw "Geolocation failed!";
         }
         placeNameLong = await getLocalityReverse(lat, lon, myLocale);
     } else if (searchTerm === "saved") {
