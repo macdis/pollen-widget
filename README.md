@@ -56,9 +56,13 @@ Make sure the [Scriptable](https://apps.apple.com/us/app/scriptable/id1405459188
 Add `Pollen Widget.js` to Scriptable:
 
 - If you have a Mac and use iCloud, the easiest way is to copy the script files to the Scriptable directory in your iCloud drive. You can do this via cURL from a MacOS terminal window:<br>
-  `curl https://github.com/macdis/Pollen-Widget/blob/0e82a89af749acd4ae4369b1927918bff947d86b/Pollen%20Widget.js --output ~/Library/Mobile\ Documents/iCloud~dk~simonbs~Scriptable/Documents/Pollen\ Widget.js`
+```
+curl https://github.com/macdis/Pollen-Widget/blob/0e82a89af749acd4ae4369b1927918bff947d86b/Pollen%20Widget.js --output ~/Library/Mobile\ Documents/iCloud~dk~simonbs~Scriptable/Documents/Pollen\ Widget.js
+```
 - Optionally add `Pollen Widget--Clear Cache.js` to Scriptable:<br>
-  `curl https://github.com/macdis/Pollen-Widget/blob/0e82a89af749acd4ae4369b1927918bff947d86b/Pollen%20Widget--Clear%20Cache.js --output ~/Library/Mobile\ Documents/iCloud~dk~simonbs~Scriptable/Documents/Pollen\ Widget--Clear\ Cache.js`
+```
+curl https://github.com/macdis/Pollen-Widget/blob/0e82a89af749acd4ae4369b1927918bff947d86b/Pollen%20Widget--Clear%20Cache.js --output ~/Library/Mobile\ Documents/iCloud~dk~simonbs~Scriptable/Documents/Pollen\ Widget--Clear\ Cache.js
+```
 - You can also copy the raw text of the `Pollen Widget.js` script text from [here](https://raw.githubusercontent.com/macdis/Pollen-Widget/main/Pollen%20Widget.js). Then hit the <kbd>+</kbd> icon in Scriptable ("Scripts" page, top right corner) and paste the script text into the editor window. **IMPORTANT: once you're back in the main Scriptable window, long-press the untitled script and rename it to `Pollen Widget`.**
 
 To install the basic widget, press and hold an empty area on your home screen. Hit the <kbd>+</kbd> icon. Search for the Scriptable app and select it.
@@ -106,7 +110,7 @@ For some locations, you will have to add more information. For example, "Hell's 
 
 There are also three special keywords you can use as the widget parameter:
 
-- `here` (which is the same as leaving the widget parameter blank), i.e., the widget will use device-based geolocation to get your current location (requires location services).
+- `here`: (which is the same as leaving the widget parameter blank), i.e., the widget will use device-based geolocation to get your current location (requires location services).
 
 - `saved`: this will use the information saved in the `saved` variable as your search location. (Refer to the variables at the beginning of `Pollen Widget.js`.)
 
