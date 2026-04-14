@@ -353,6 +353,9 @@ if (todayIndex >= 0 && cacheAge <= timeFrame) {
     }
 }
 
+// Uncomment the next line to see the structure of the data object in the console (useful for debugging or if you want to modify the widget to show other info from the API)
+// console.log(JSON.stringify(data, null, 2));
+
 // Set some variables
 const dayZero = new Date(
     data.dailyInfo[0].date.year,
