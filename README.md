@@ -120,7 +120,7 @@ There are also three special keywords you can use as the widget parameter:
 
 The widget works as is (using geolocation or a widget parameter search term), but is also configurable. The variables/options are all at the beginning of the `Pollen Widget.js` file. The main options are as follows:
 
-- The widget does not have to fetch data all year long. You can set `startMonth` and `endMonth` to whatever suits your location. Outside of this period the widget will display a message but won't fetch data. Defaults: `const startMonth = 4;` and `const endMonth = 9;`
+- The widget does not have to fetch data all year long. You can set `startMonth` and `endMonth` to whatever suits your location. Outside of this period the widget will display a message but won't fetch data. Defaults: `const startMonth = 1;` and `const endMonth = 12;`
 
 - The off-season message can be configured through the `offSeasonMessage` variable. Default: `const offSeasonMessage = "Check back next";` The message is of the form: "Check back next [startMonth]!"
 
