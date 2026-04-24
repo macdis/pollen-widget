@@ -289,6 +289,21 @@ function apiDateToNum(d) {
     return +(`${d.year}${d.month.toString().padStart(2, "0")}${d.day.toString().padStart(2, "0")}`);
 }
 
+// Helper: synthesize a placeholder "today" entry with null pollen data,
+// cloning the structure from an existing day in the response.
+function synthesizeTodayEntry(todayNum, templateDay) {
+    const tStr = todayNum.toString();
+    const tYear = parseInt(tStr.substring(0, 4));
+    const tMonth = parseInt(tStr.substring(4, 6));
+    const tDay = parseInt(tStr.substring(6, 8));
+    const placeholder = JSON.parse(JSON.stringify(templateDay));
+    placeholder.date = { year: tYear, month: tMonth, day: tDay };
+    placeholder.pollenTypeInfo.forEach((pt) => {
+        delete pt.indexInfo;
+    });
+    return placeholder;
+}
+
 // Initialize date formatter (device-local time)
 const df = new DateFormatter();
 df.dateFormat = "yyyyMMdd";
@@ -296,48 +311,61 @@ df.dateFormat = "yyyyMMdd";
 // Today's local date as a yyyyMMdd number
 const todayLocal = +df.string(now);
 
-// Cache age in seconds
+// Cache age in seconds (used only for same-day refresh decisions)
 const fileTimeStamp = Math.floor(fm.modificationDate(activeFile).getTime() / 1000);
 const cacheAge = nowEpoch - fileTimeStamp;
 
 console.log(`todayLocal = ${todayLocal}`);
 console.log(`Cache age  = ${cacheAge}/${timeFrame} seconds`);
 
-// The Google Pollen API returns dates in UTC. When the device's local date
-// differs from UTC (e.g., UTC+ after local midnight, or UTC- after UTC midnight),
-// the first date in the API response may not match today's local date.
-// Instead of assuming a fixed offset, we find today's local date in the array.
+// Determine the cache's effective "first day" (the local date shown in column 1)
+let cachedFirstDate = apiDateToNum(cachedData.dailyInfo[0].date);
 
-// Find today's local date in the cached data
-let todayIndex = cachedData.dailyInfo.findIndex(
+// Find today in the cached data
+let cachedTodayIndex = cachedData.dailyInfo.findIndex(
     (d) => apiDateToNum(d.date) === todayLocal
 );
 
-if (todayIndex >= 0 && cacheAge <= timeFrame) {
-    // Today is in the cache and it's still fresh — use it
-    console.log(`Using cached data. Today found at index ${todayIndex}.`);
+// Decision logic:
+// 1. Is the cached data's first date == todayLocal?
+//    → Cache is aligned to today. Use it unless the timer says refresh.
+// 2. Is todayLocal found somewhere in the cached data (but not at index 0)?
+//    → The cache spans today but starts earlier. Slice it so today is first.
+//    → But this means the first date *was* an earlier day, so it's date-stale.
+//      Refetch to get the best data for today onward.
+// 3. todayLocal is NOT in the cached data at all?
+//    → Either the cache is from the past (date-stale) or the API was UTC-ahead
+//      when the cache was created. Either way, refetch.
+
+if (cachedTodayIndex === 0 && cacheAge <= timeFrame) {
+    // Cache is aligned to today and fresh within the update interval.
+    // Use it as-is.
+    console.log("Cache is aligned to today and fresh. Using cached data.");
     var data = JSON.parse(JSON.stringify(cachedData));
-    if (todayIndex > 0) data.dailyInfo = data.dailyInfo.slice(todayIndex);
-} else if (todayIndex >= 0 && cacheAge > timeFrame) {
-    // Today is in the cache but the cache is stale — refetch
-    console.log("Cache expired but today is in cache. Refetching.");
-    // Save today's entry before we overwrite the cache
-    const savedToday = JSON.parse(JSON.stringify(cachedData.dailyInfo[todayIndex]));
+
+} else if (cachedTodayIndex === 0 && cacheAge > timeFrame) {
+    // Cache is aligned to today but the update-interval timer has expired.
+    // Refetch to pick up intra-day forecast updates, but guarantee today stays.
+    console.log("Cache aligned to today but timer expired. Refreshing.");
+    const savedToday = JSON.parse(JSON.stringify(cachedData.dailyInfo[0]));
     var data = await getJsonData();
     let freshTodayIndex = data.dailyInfo.findIndex(
         (d) => apiDateToNum(d.date) === todayLocal
     );
     if (freshTodayIndex >= 0) {
-        // Fresh data includes today — use it
         if (freshTodayIndex > 0) data.dailyInfo = data.dailyInfo.slice(freshTodayIndex);
     } else {
-        // Fresh data is UTC-ahead, today is missing. Prepend saved today.
+        // API is UTC-ahead, today missing from fresh data. Use saved today.
         console.log("Fresh data is UTC-ahead. Prepending today from previous cache.");
         data.dailyInfo.unshift(savedToday);
     }
-} else {
-    // Today is NOT in the cached data at all
-    console.log("Today not in cached data. Refetching.");
+
+} else if (cachedTodayIndex > 0) {
+    // Today exists in the cache but it's not the first entry — the cache
+    // started on an earlier day. This means we've crossed a local-date boundary.
+    // Refetch to get the best data for today onward.
+    console.log(`Date-stale: cache starts at ${cachedFirstDate}, today is ${todayLocal}. Refetching.`);
+    const savedToday = JSON.parse(JSON.stringify(cachedData.dailyInfo[cachedTodayIndex]));
     var data = await getJsonData();
     let freshTodayIndex = data.dailyInfo.findIndex(
         (d) => apiDateToNum(d.date) === todayLocal
@@ -345,12 +373,32 @@ if (todayIndex >= 0 && cacheAge <= timeFrame) {
     if (freshTodayIndex >= 0) {
         if (freshTodayIndex > 0) data.dailyInfo = data.dailyInfo.slice(freshTodayIndex);
     } else {
-        // Today isn't available anywhere. This happens if:
-        // - First run of the day was already after UTC rolled over (UTC- timezone), OR
-        // - Cache was from days ago and already cleared
-        // Use the data as-is (starts from tomorrow UTC = today is missing).
-        console.log("Today not available anywhere. Using data starting from UTC's today.");
+        // API is UTC-ahead, today missing from fresh data. Use saved today from cache.
+        console.log("Fresh data is UTC-ahead. Prepending today from previous cache.");
+        data.dailyInfo.unshift(savedToday);
     }
+
+} else {
+    // Today is NOT in the cached data at all. The cache is either from a past day
+    // or was created when the API was UTC-ahead and never had today.
+    // Refetch.
+    console.log(`Today (${todayLocal}) not in cache (starts ${cachedFirstDate}). Refetching.`);
+    var data = await getJsonData();
+    let freshTodayIndex = data.dailyInfo.findIndex(
+        (d) => apiDateToNum(d.date) === todayLocal
+    );
+    if (freshTodayIndex >= 0) {
+        if (freshTodayIndex > 0) data.dailyInfo = data.dailyInfo.slice(freshTodayIndex);
+    } else {
+        // API is UTC-ahead, today missing. Synthesize a null placeholder for today.
+        console.log("Today not available in API. Synthesizing placeholder.");
+        data.dailyInfo.unshift(synthesizeTodayEntry(todayLocal, data.dailyInfo[0]));
+    }
+}
+
+// Trim to the expected number of days
+if (data.dailyInfo.length > days) {
+    data.dailyInfo = data.dailyInfo.slice(0, days);
 }
 
 // Uncomment the next line to see the structure of the data object in the console (useful for debugging or if you want to modify the widget to show other info from the API)
