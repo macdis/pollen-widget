@@ -355,9 +355,11 @@ if (cachedTodayIndex === 0 && cacheAge <= timeFrame) {
     if (freshTodayIndex >= 0) {
         if (freshTodayIndex > 0) data.dailyInfo = data.dailyInfo.slice(freshTodayIndex);
     } else {
-        // API is UTC-ahead, today missing from fresh data. Use saved today.
+        // API is UTC-ahead, today missing from fresh data. Prepend cached today.
         console.log("Fresh data is UTC-ahead. Prepending today from previous cache.");
         data.dailyInfo.unshift(savedToday);
+        // Write corrected data back to cache so subsequent runs find today
+        fm.writeString(activeFile, JSON.stringify(data));
     }
 
 } else if (cachedTodayIndex > 0) {
@@ -373,9 +375,10 @@ if (cachedTodayIndex === 0 && cacheAge <= timeFrame) {
     if (freshTodayIndex >= 0) {
         if (freshTodayIndex > 0) data.dailyInfo = data.dailyInfo.slice(freshTodayIndex);
     } else {
-        // API is UTC-ahead, today missing from fresh data. Use saved today from cache.
+        // API is UTC-ahead, today missing from fresh data. Prepend cached today.
         console.log("Fresh data is UTC-ahead. Prepending today from previous cache.");
         data.dailyInfo.unshift(savedToday);
+        fm.writeString(activeFile, JSON.stringify(data));
     }
 
 } else {
@@ -393,6 +396,7 @@ if (cachedTodayIndex === 0 && cacheAge <= timeFrame) {
         // API is UTC-ahead, today missing. Synthesize a null placeholder for today.
         console.log("Today not available in API. Synthesizing placeholder.");
         data.dailyInfo.unshift(synthesizeTodayEntry(todayLocal, data.dailyInfo[0]));
+        fm.writeString(activeFile, JSON.stringify(data));
     }
 }
 
